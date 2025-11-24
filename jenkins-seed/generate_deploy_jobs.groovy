@@ -1,5 +1,38 @@
 import groovy.json.JsonSlurper
-import java.nio.file.Files
+
+/**
+ * Helper method to fetch the latest build artifact from the App Build job.
+ * This MUST be inside the script, above the DSL processing.
+ */
+def getLatestBuild = { appName ->
+
+    def jobName = "${appName}-Build"          // Your CI build job name
+    def job = Jenkins.instance.getItem(jobName)
+
+    if (!job) {
+        println "❗ ERROR: Build job '${jobName}' not found."
+        return null
+    }
+
+    def lastSuccessful = job.getLastSuccessfulBuild()
+    if (!lastSuccessful) {
+        println "❗ No successful builds found for ${appName}"
+        return null
+    }
+
+    def artifact = lastSuccessful.artifacts.find { it.fileName == "latest-build.txt" }
+    if (!artifact) {
+        println "❗ No 'latest-build.txt' found in artifacts of ${jobName}"
+        return null
+    }
+
+    // Read artifact content
+    def content = artifact.getFile().text.trim()
+    println "✔ Latest build for ${appName} = ${content}"
+    return content
+}
+
+// -------------------- MAIN DSL LOGIC --------------------
 
 def config = new JsonSlurper().parseText(
     readFileFromWorkspace('jenkins-seed/deploy-config.json')
@@ -7,36 +40,30 @@ def config = new JsonSlurper().parseText(
 
 def envs = ["Dev", "Test", "Staging", "Prod"]
 
-// 1️⃣ Read latest build file for each app
 config.apps.each { appName, appData ->
 
-    // Folder for the app
     folder(appName)
 
-    // Read latest build artifact
-    String latestBuildFile = "build-artifacts/${appName}/latest-build.txt"
-    if (!new File(latestBuildFile).exists()) {
-        println "No build found for ${appName}, skipping..."
+    // Fetch latest build for this app
+    def buildName = getLatestBuild(appName)
+    if (!buildName) {
+        println "Skipping ${appName}, cannot determine build"
         return
     }
 
-    String buildName = new File(latestBuildFile).text.trim()
-
-    println "Detected latest build for ${appName}: ${buildName}"
-
-    // 2️⃣ Create build folder
     folder("${appName}/${buildName}")
 
-    // 3️⃣ Create client folders + deployment jobs
     appData.clients.each { clientName ->
 
         folder("${appName}/${buildName}/${clientName}")
 
         envs.each { envDisplay ->
 
-            String envLower = envDisplay.toLowerCase()
+            def envLower = envDisplay.toLowerCase()
 
             pipelineJob("${appName}/${buildName}/${clientName}/Deploy ${envDisplay} ENV") {
+
+                description("Auto-generated deployment job for ${appName}/${buildName}/${clientName} → ${envDisplay}")
 
                 definition {
                     cps {
