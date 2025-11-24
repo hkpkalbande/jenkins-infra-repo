@@ -3,10 +3,19 @@ println "[DEBUG] Starting generate_deploy_jobs.groovy"
 import groovy.json.JsonSlurper
 
 
-println "[DEBUG] Loading config JSON from jenkins-seed/deploy-config.json"
-def config = new JsonSlurper().parseText(
-    readFileFromWorkspace('jenkins-seed/deploy-config.json')
-)
+
+println "[DEBUG] Loading config JSON from jenkins-infra-repo/jenkins-seed/deploy-config.json"
+def configJsonText
+try {
+    // Try Jenkins Pipeline method
+    configJsonText = readFileFromWorkspace('jenkins-infra-repo/jenkins-seed/deploy-config.json')
+    println "[DEBUG] Loaded config using readFileFromWorkspace"
+} catch (MissingMethodException | groovy.lang.MissingPropertyException e) {
+    // Fallback for local execution
+    println "[DEBUG] readFileFromWorkspace not available, reading file locally"
+    configJsonText = new File('jenkins-seed/deploy-config.json').text
+}
+def config = new JsonSlurper().parseText(configJsonText)
 println "[DEBUG] Loaded config: ${config}"
 
 
@@ -24,12 +33,14 @@ config.apps.each { appName, appData ->
 
     // Path to build version from Git repo
 
+
     def buildFile = "build-info/jenkins-builds/${appName}/latest-build.txt"
     println "[DEBUG] Build file path: ${buildFile}"
-    def file = new File(buildFile)
+    def buildFileObj = new File(buildFile)
 
 
-    if (!file.exists()) {
+
+    if (!buildFileObj.exists()) {
         println "[DEBUG] Build file does not exist for ${appName}, skipping."
         println "❗ No build version file found for ${appName}, skipping…"
         return
@@ -37,7 +48,8 @@ config.apps.each { appName, appData ->
 
     // Read build version
 
-    def buildName = file.text.trim()
+
+    def buildName = buildFileObj.text.trim()
     println "[DEBUG] Read build name for ${appName}: ${buildName}"
     println "✔ Latest build for ${appName}: ${buildName}"
 
