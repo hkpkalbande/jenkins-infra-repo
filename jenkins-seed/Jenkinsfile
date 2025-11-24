@@ -1,0 +1,15 @@
+pipeline {
+  agent any
+  stages {
+    stage('Build') {
+      steps {
+        script {
+          def newBuildNumber = env.BUILD_NUMBER
+
+          writeFile file: "latest-build.txt", text: "build${newBuildNumber}"
+          archiveArtifacts artifacts: "latest-build.txt", fingerprint: true
+        }
+      }
+    }
+  }
+}

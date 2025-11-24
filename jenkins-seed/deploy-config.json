@@ -1,15 +1,10 @@
 {
   "apps": {
     "App1": {
-      "builds": {
-        "build1": ["Client1", "Client2"],
-        "build2": ["Client1", "Client3"]
-      }
+      "clients": ["Client1", "Client2", "Client3"]
     },
     "App2": {
-      "builds": {
-        "build10": ["ClientA", "ClientB", "ClientC"]
-      }
+      "clients": ["ClientA", "ClientB", "ClientC"]
     }
   }
 }

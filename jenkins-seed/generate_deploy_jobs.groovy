@@ -1,51 +1,56 @@
 import groovy.json.JsonSlurper
+import java.nio.file.Files
+
+def config = new JsonSlurper().parseText(
+    readFileFromWorkspace('jenkins-seed/deploy-config.json')
+)
 
 def envs = ["Dev", "Test", "Staging", "Prod"]
 
-// Read config JSON from workspace (seed job will check out this repo)
-def configText = readFileFromWorkspace('jenkins-seed/deploy-config.json')
-def config = new JsonSlurper().parseText(configText)
+// 1️⃣ Read latest build file for each app
+config.apps.each { appName, appData ->
 
-config.apps.each { String appName, def appData ->
+    // Folder for the app
+    folder(appName)
 
-    folder(appName) {
-        description("Folder for application: ${appName}")
+    // Read latest build artifact
+    String latestBuildFile = "build-artifacts/${appName}/latest-build.txt"
+    if (!new File(latestBuildFile).exists()) {
+        println "No build found for ${appName}, skipping..."
+        return
     }
 
-    appData.builds.each { String buildName, def clients ->
+    String buildName = new File(latestBuildFile).text.trim()
 
-        folder("${appName}/${buildName}") {
-            description("Folder for build: ${buildName} of ${appName}")
-        }
+    println "Detected latest build for ${appName}: ${buildName}"
 
-        clients.each { String clientName ->
+    // 2️⃣ Create build folder
+    folder("${appName}/${buildName}")
 
-            folder("${appName}/${buildName}/${clientName}") {
-                description("Folder for client: ${clientName} of ${appName} / ${buildName}")
-            }
+    // 3️⃣ Create client folders + deployment jobs
+    appData.clients.each { clientName ->
 
-            envs.each { String envDisplay ->
+        folder("${appName}/${buildName}/${clientName}")
 
-                String envLower = envDisplay.toLowerCase()
-                String jobName = "${appName}/${buildName}/${clientName}/Deploy ${envDisplay} ENV"
+        envs.each { envDisplay ->
 
-                pipelineJob(jobName) {
-                    description("Auto-generated deployment job for ${appName} / ${buildName} / ${clientName} → ${envDisplay}")
+            String envLower = envDisplay.toLowerCase()
 
-                    definition {
-                        cps {
-                            script("""
-                                @Library('my-shared-library') _
+            pipelineJob("${appName}/${buildName}/${clientName}/Deploy ${envDisplay} ENV") {
 
-                                deploy(
-                                    app: '${appName}',
-                                    build: '${buildName}',
-                                    client: '${clientName}',
-                                    env: '${envLower}'
-                                )
-                            """.stripIndent())
-                            sandbox()
-                        }
+                definition {
+                    cps {
+                        script("""
+                            @Library('my-shared-library') _
+
+                            deploy(
+                                app: '${appName}',
+                                build: '${buildName}',
+                                client: '${clientName}',
+                                env: '${envLower}'
+                            )
+                        """.stripIndent())
+                        sandbox()
                     }
                 }
             }
