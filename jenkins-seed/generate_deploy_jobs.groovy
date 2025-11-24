@@ -1,52 +1,35 @@
 import groovy.json.JsonSlurper
 
-// Helper: Read latest build from another Jenkins job using DSL API (supported!)
-def getLatestBuild = { appName ->
-
-    def jobName = "${appName}-Build"
-
-    def job = jobs[jobName]
-    if (job == null) {
-        println "❗ ERROR: Build job '${jobName}' not found in DSL context."
-        return null
-    }
-
-    def last = job.lastSuccessfulBuild
-    if (last == null) {
-        println "❗ No successful build found for ${jobName}"
-        return null
-    }
-
-    def artifact = last.artifacts.find { it.fileName == 'latest-build.txt' }
-    if (artifact == null) {
-        println "❗ latest-build.txt not found in ${jobName}"
-        return null
-    }
-
-    def content = artifact.file.text.trim()
-    println "✔ Latest build for ${appName}: ${content}"
-    return content
-}
-
-// Main DSL logic
+// -------------------- READ CONFIG --------------------
 def config = new JsonSlurper().parseText(
     readFileFromWorkspace('jenkins-seed/deploy-config.json')
 )
 
+// -------------------- DEFINE ENVIRONMENTS --------------------
 def envs = ["Dev", "Test", "Staging", "Prod"]
 
+// -------------------- MAIN LOGIC --------------------
 config.apps.each { appName, appData ->
 
+    // App folder
     folder(appName)
 
-    def buildName = getLatestBuild(appName)
-    if (!buildName) {
-        println "Skipping ${appName}"
+    // Read latest build copied by Copy Artifact plugin
+    def buildFilePath = "build-artifacts/${appName}/latest-build.txt"
+    def fileObj = new File(buildFilePath)
+
+    if (!fileObj.exists()) {
+        println "❗ No latest-build.txt for ${appName}, skipping"
         return
     }
 
+    def buildName = fileObj.text.trim()
+    println "✔ Found build for ${appName}: ${buildName}"
+
+    // Create build folder
     folder("${appName}/${buildName}")
 
+    // Create client folders + deploy jobs
     appData.clients.each { clientName ->
 
         folder("${appName}/${buildName}/${clientName}")
