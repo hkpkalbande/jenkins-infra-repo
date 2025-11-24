@@ -1,56 +1,51 @@
 import groovy.json.JsonSlurper
 
-// -------------------- READ CONFIG --------------------
+// Load config JSON
 def config = new JsonSlurper().parseText(
     readFileFromWorkspace('jenkins-seed/deploy-config.json')
 )
 
-// -------------------- DEFINE ENVIRONMENTS --------------------
 def envs = ["Dev", "Test", "Staging", "Prod"]
 
-// -------------------- MAIN LOGIC --------------------
 config.apps.each { appName, appData ->
 
-    // App folder
     folder(appName)
 
-    // Read latest build copied by Copy Artifact plugin
-    def buildFilePath = "build-artifacts/${appName}/latest-build.txt"
-    def fileObj = new File(buildFilePath)
+    // Path to build version from Git repo
+    def buildFile = "build-info/jenkins-builds/${appName}/latest-build.txt"
+    def file = new File(buildFile)
 
-    if (!fileObj.exists()) {
-        println "❗ No latest-build.txt for ${appName}, skipping"
+    if (!file.exists()) {
+        println "❗ No build version file found for ${appName}, skipping…"
         return
     }
 
-    def buildName = fileObj.text.trim()
-    println "✔ Found build for ${appName}: ${buildName}"
+    // Read build version
+    def buildName = file.text.trim()
+    println "✔ Latest build for ${appName}: ${buildName}"
 
     // Create build folder
     folder("${appName}/${buildName}")
 
-    // Create client folders + deploy jobs
+    // Clients and environment jobs
     appData.clients.each { clientName ->
 
         folder("${appName}/${buildName}/${clientName}")
 
         envs.each { envDisplay ->
 
-            def envLower = envDisplay.toLowerCase()
-
             pipelineJob("${appName}/${buildName}/${clientName}/Deploy ${envDisplay} ENV") {
-
-                description("Auto-generated deploy job for ${appName}/${buildName}/${clientName} → ${envDisplay}")
 
                 definition {
                     cps {
                         script("""
                             @Library('my-shared-library') _
+
                             deploy(
                                 app: '${appName}',
                                 build: '${buildName}',
                                 client: '${clientName}',
-                                env: '${envLower}'
+                                env: '${envDisplay.toLowerCase()}'
                             )
                         """.stripIndent())
                         sandbox()
