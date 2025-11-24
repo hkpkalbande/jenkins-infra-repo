@@ -11,18 +11,17 @@ config.apps.each { appName, appData ->
 
     folder(appName)
 
+
     // Path to build version from Git repo
     def buildFile = "build-info/jenkins-builds/${appName}/latest-build.txt"
-    def file = new File(buildFile)
-
-    if (!file.exists()) {
+    def buildName = null
+    try {
+        buildName = readFileFromWorkspace(buildFile).trim()
+        println "✔ Latest build for ${appName}: ${buildName}"
+    } catch (Exception e) {
         println "❗ No build version file found for ${appName}, skipping…"
         return
     }
-
-    // Read build version
-    def buildName = file.text.trim()
-    println "✔ Latest build for ${appName}: ${buildName}"
 
     // Create build folder
     folder("${appName}/${buildName}")
