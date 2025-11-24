@@ -1,39 +1,34 @@
 import groovy.json.JsonSlurper
 
-/**
- * Helper method to fetch the latest build artifact from the App Build job.
- * This MUST be inside the script, above the DSL processing.
- */
+// Helper: Read latest build from another Jenkins job using DSL API (supported!)
 def getLatestBuild = { appName ->
 
-    def jobName = "${appName}-Build"          // Your CI build job name
-    def job = Jenkins.instance.getItem(jobName)
+    def jobName = "${appName}-Build"
 
-    if (!job) {
-        println "❗ ERROR: Build job '${jobName}' not found."
+    def job = jobs[jobName]
+    if (job == null) {
+        println "❗ ERROR: Build job '${jobName}' not found in DSL context."
         return null
     }
 
-    def lastSuccessful = job.getLastSuccessfulBuild()
-    if (!lastSuccessful) {
-        println "❗ No successful builds found for ${appName}"
+    def last = job.lastSuccessfulBuild
+    if (last == null) {
+        println "❗ No successful build found for ${jobName}"
         return null
     }
 
-    def artifact = lastSuccessful.artifacts.find { it.fileName == "latest-build.txt" }
-    if (!artifact) {
-        println "❗ No 'latest-build.txt' found in artifacts of ${jobName}"
+    def artifact = last.artifacts.find { it.fileName == 'latest-build.txt' }
+    if (artifact == null) {
+        println "❗ latest-build.txt not found in ${jobName}"
         return null
     }
 
-    // Read artifact content
-    def content = artifact.getFile().text.trim()
-    println "✔ Latest build for ${appName} = ${content}"
+    def content = artifact.file.text.trim()
+    println "✔ Latest build for ${appName}: ${content}"
     return content
 }
 
-// -------------------- MAIN DSL LOGIC --------------------
-
+// Main DSL logic
 def config = new JsonSlurper().parseText(
     readFileFromWorkspace('jenkins-seed/deploy-config.json')
 )
@@ -44,10 +39,9 @@ config.apps.each { appName, appData ->
 
     folder(appName)
 
-    // Fetch latest build for this app
     def buildName = getLatestBuild(appName)
     if (!buildName) {
-        println "Skipping ${appName}, cannot determine build"
+        println "Skipping ${appName}"
         return
     }
 
@@ -63,13 +57,12 @@ config.apps.each { appName, appData ->
 
             pipelineJob("${appName}/${buildName}/${clientName}/Deploy ${envDisplay} ENV") {
 
-                description("Auto-generated deployment job for ${appName}/${buildName}/${clientName} → ${envDisplay}")
+                description("Auto-generated deploy job for ${appName}/${buildName}/${clientName} → ${envDisplay}")
 
                 definition {
                     cps {
                         script("""
                             @Library('my-shared-library') _
-
                             deploy(
                                 app: '${appName}',
                                 build: '${buildName}',
